@@ -1,0 +1,17 @@
+{
+  "name": "xiaozhi-music-backend",
+  "version": "1.0.0",
+  "description": "YouTube audio search API for Xiaozhi ESP32",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ffmpeg-static": "^5.2.0",
+    "yt-dlp-exec": "^1.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

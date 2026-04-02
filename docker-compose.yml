@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  xiaozhi-music-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xiaozhi-music-api
+    environment:
+      - PORT=7777
+      - TZ=Asia/Ho_Chi_Minh
+    ports:
+      - "7777:7777"
+    restart: unless-stopped
