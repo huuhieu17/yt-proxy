@@ -5,6 +5,7 @@ RUN apt-get update \
 		&& apt-get install -y --no-install-recommends \
 			ca-certificates \
 			python3 \
+			ffmpeg \
 			wget \
 		&& ln -sf /usr/bin/python3 /usr/local/bin/python \
 		&& rm -rf /var/lib/apt/lists/*
@@ -16,7 +17,7 @@ RUN wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --production
 
 FROM dependencies AS app
 
