@@ -2,10 +2,7 @@ version: '3.8'
 
 services:
   steve-music-api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: app
+    image: huuhieu17/steve-music-api:latest
     container_name: steve-music-api
     environment:
       - PORT=7777

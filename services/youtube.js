@@ -4,6 +4,24 @@ function parseYtDlpJson(output) {
   return typeof output === 'string' ? JSON.parse(output) : output;
 }
 
+function getSourceUrl(output) {
+  if (typeof output !== 'string') {
+    throw new Error('yt-dlp did not return a source URL');
+  }
+
+  const sourceUrl = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('http://') || line.startsWith('https://'))
+    .pop();
+
+  if (!sourceUrl) {
+    throw new Error('Failed to resolve YouTube source audio URL');
+  }
+
+  return sourceUrl;
+}
+
 function createYoutubeRouter({ runYtDlp, spawn, getFfmpegCommand, extractVideoId, parseLimit, parseBitrate }) {
   const router = Router();
 
@@ -83,12 +101,25 @@ function createYoutubeRouter({ runYtDlp, spawn, getFfmpegCommand, extractVideoId
         getUrl: true,
         extractorArgs: 'youtube:player_client=android'
       });
-      const sourceUrl = stdout.trim().split('\n').pop();
-      if (!sourceUrl || !sourceUrl.startsWith('http')) throw new Error('Failed to resolve source audio URL');
+      const sourceUrl = getSourceUrl(stdout);
 
       res.setHeader('Content-Type', 'audio/mpeg');
       res.setHeader('Cache-Control', 'no-store');
-      ffmpeg = spawn(getFfmpegCommand(), ['-i', sourceUrl, '-vn', '-acodec', 'libmp3lame', '-ab', bitrate, '-f', 'mp3', 'pipe:1'], { stdio: ['ignore', 'pipe', 'pipe'] });
+      ffmpeg = spawn(getFfmpegCommand(), [
+        '-hide_banner',
+        '-loglevel', 'error',
+        '-reconnect', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_delay_max', '5',
+        '-i', sourceUrl,
+        '-vn',
+        '-sn',
+        '-dn',
+        '-c:a', 'libmp3lame',
+        '-b:a', bitrate,
+        '-f', 'mp3',
+        'pipe:1'
+      ], { stdio: ['ignore', 'pipe', 'pipe'] });
       ffmpeg.stdout.pipe(res);
       ffmpeg.stderr.on('data', (data) => console.error(`[${new Date().toISOString()}] ffmpeg: ${data}`));
       ffmpeg.on('error', (error) => {
@@ -97,7 +128,11 @@ function createYoutubeRouter({ runYtDlp, spawn, getFfmpegCommand, extractVideoId
         else res.end();
       });
       ffmpeg.on('close', () => { if (!res.writableEnded) res.end(); });
-      req.on('close', () => { if (ffmpeg && !ffmpeg.killed) ffmpeg.kill('SIGKILL'); });
+      res.on('close', () => {
+        if (!res.writableEnded && !res.writableFinished && ffmpeg && !ffmpeg.killed) {
+          ffmpeg.kill('SIGKILL');
+        }
+      });
     } catch (error) {
       console.error(`[${new Date().toISOString()}] YouTube stream error:`, error.message);
       if (ffmpeg && !ffmpeg.killed) ffmpeg.kill('SIGKILL');

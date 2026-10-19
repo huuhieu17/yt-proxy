@@ -76,6 +76,7 @@ function createSoundCloudRouter({ runYtDlp, spawn, getFfmpegCommand, parseLimit,
     if (!isSoundCloudUrl(url)) return res.status(400).json({ success: false, error: 'Missing or invalid SoundCloud url' });
 
     let ffmpeg;
+    let responseFinished = false;
     try {
       const stdout = await runYtDlp(url, { f: 'bestaudio/best', noPlaylist: true, getUrl: true });
       const sourceUrl = getSourceUrl(stdout);
@@ -103,11 +104,21 @@ function createSoundCloudRouter({ runYtDlp, spawn, getFfmpegCommand, parseLimit,
         else res.end();
       });
       ffmpeg.on('close', (code) => {
-        if (code !== 0) console.error(`[${new Date().toISOString()}] SoundCloud ffmpeg exited with code ${code}`);
+        if (code !== 0) {
+          console.error(
+            `[${new Date().toISOString()}] SoundCloud ffmpeg exited with code ${code}, signal=${ffmpeg.signalCode || 'none'}`
+          );
+        }
         if (!res.writableEnded) res.end();
       });
+      res.on('finish', () => {
+        responseFinished = true;
+      });
       res.on('close', () => {
-        if (!res.writableEnded && ffmpeg && !ffmpeg.killed) ffmpeg.kill('SIGKILL');
+        if (!responseFinished && !res.writableFinished && ffmpeg && !ffmpeg.killed) {
+          console.warn(`[${new Date().toISOString()}] SoundCloud client disconnected; stopping ffmpeg`);
+          ffmpeg.kill('SIGKILL');
+        }
       });
     } catch (error) {
       console.error(`[${new Date().toISOString()}] SoundCloud stream error:`, error.message);
