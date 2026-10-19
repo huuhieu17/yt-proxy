@@ -99,12 +99,16 @@ function createYoutubeRouter({ runYtDlp, spawn, getFfmpegCommand, extractVideoId
         f: 'bestaudio/best',
         noPlaylist: true,
         getUrl: true,
+        quiet: true,
+        noWarnings: true,
         extractorArgs: 'youtube:player_client=android'
       });
       const sourceUrl = getSourceUrl(stdout);
 
       res.setHeader('Content-Type', 'audio/mpeg');
       res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Accept-Ranges', 'none');
+      let responseFinished = false;
       ffmpeg = spawn(getFfmpegCommand(), [
         '-hide_banner',
         '-loglevel', 'error',
@@ -127,9 +131,18 @@ function createYoutubeRouter({ runYtDlp, spawn, getFfmpegCommand, extractVideoId
         if (!res.headersSent) res.status(500).json({ success: false, error: 'Failed to start MP3 transcoder' });
         else res.end();
       });
-      ffmpeg.on('close', () => { if (!res.writableEnded) res.end(); });
+      ffmpeg.on('close', (code, signal) => {
+        if (code !== 0 && signal !== 'SIGKILL') {
+          console.error(`[${new Date().toISOString()}] YouTube ffmpeg exited with code ${code}, signal=${signal || 'none'}`);
+        }
+        if (!res.writableEnded) res.end();
+      });
+      res.on('finish', () => {
+        responseFinished = true;
+      });
       res.on('close', () => {
-        if (!res.writableEnded && !res.writableFinished && ffmpeg && !ffmpeg.killed) {
+        if (!responseFinished && !res.writableFinished && ffmpeg && !ffmpeg.killed) {
+          console.warn(`[${new Date().toISOString()}] YouTube client disconnected; stopping ffmpeg`);
           ffmpeg.kill('SIGKILL');
         }
       });
