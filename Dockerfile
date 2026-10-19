@@ -3,6 +3,7 @@ FROM node:18-slim AS dependencies
 # Dependency stage: this is reused when only application source changes.
 RUN apt-get update \
 		&& apt-get install -y --no-install-recommends \
+			ca-certificates \
 			python3 \
 			ffmpeg \
 			wget \
