@@ -5,7 +5,6 @@ RUN apt-get update \
 		&& apt-get install -y --no-install-recommends \
 			ca-certificates \
 			python3 \
-			ffmpeg \
 			wget \
 		&& ln -sf /usr/bin/python3 /usr/local/bin/python \
 		&& rm -rf /var/lib/apt/lists/*
