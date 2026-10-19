@@ -1,5 +1,9 @@
 const { Router } = require('express');
 
+function parseYtDlpJson(output) {
+  return typeof output === 'string' ? JSON.parse(output) : output;
+}
+
 function createYoutubeRouter({ runYtDlp, spawn, getFfmpegCommand, extractVideoId, parseLimit, parseBitrate }) {
   const router = Router();
 
@@ -22,7 +26,7 @@ function createYoutubeRouter({ runYtDlp, spawn, getFfmpegCommand, extractVideoId
         extractorArgs: 'youtube:player_client=android'
       });
 
-      res.json({ success: true, info: JSON.parse(stdout) });
+      res.json({ success: true, info: parseYtDlpJson(stdout) });
     } catch (error) {
       console.error(`[${new Date().toISOString()}] YouTube info error:`, error.message);
       res.status(500).json({ success: false, error: 'Failed to fetch YouTube video info' });
@@ -43,7 +47,7 @@ function createYoutubeRouter({ runYtDlp, spawn, getFfmpegCommand, extractVideoId
         dumpSingleJson: true,
         extractorArgs: 'youtube:player_client=android'
       });
-      const payload = JSON.parse(stdout);
+      const payload = parseYtDlpJson(stdout);
       const entries = Array.isArray(payload.entries) ? payload.entries : [];
       const songs = entries.map((item) => {
         const id = item.id || item.url;
@@ -129,7 +133,8 @@ function createYoutubeRouter({ runYtDlp, spawn, getFfmpegCommand, extractVideoId
       const stdout = await runYtDlp(`https://www.youtube.com/watch?v=${resolvedVideoId}&list=RD${resolvedVideoId}`, {
         flatPlaylist: true, playlistEnd: limit + 1, dumpSingleJson: true, extractorArgs: 'youtube:player_client=android'
       });
-      const entries = Array.isArray(JSON.parse(stdout).entries) ? JSON.parse(stdout).entries : [];
+      const payload = parseYtDlpJson(stdout);
+      const entries = Array.isArray(payload.entries) ? payload.entries : [];
       const songs = entries.map((item) => {
         const id = item.id || item.url;
         return !id || id === resolvedVideoId ? null : { id, title: item.title || 'Unknown title', channel: item.uploader || item.channel || null, url: `https://www.youtube.com/watch?v=${id}` };

@@ -1,21 +1,26 @@
-FROM node:18-slim
+FROM node:18-slim AS dependencies
 
-# Install yt-dlp and dependencies
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    ffmpeg \
-    wget \
-    && wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp \
-    && chmod a+rx /usr/local/bin/yt-dlp \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Dependency stage: this is reused when only application source changes.
+RUN apt-get update \
+		&& apt-get install -y --no-install-recommends \
+			python3 \
+			ffmpeg \
+			wget \
+		&& ln -sf /usr/bin/python3 /usr/local/bin/python \
+		&& rm -rf /var/lib/apt/lists/*
+
+RUN wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+		-O /usr/local/bin/yt-dlp \
+		&& chmod a+rx /usr/local/bin/yt-dlp
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install --production
+RUN npm ci --omit=dev
 
+FROM dependencies AS app
+
+WORKDIR /app
 COPY . .
 
 ENV PORT=7777

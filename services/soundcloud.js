@@ -9,6 +9,28 @@ function isSoundCloudUrl(input) {
   }
 }
 
+function parseYtDlpJson(output) {
+  return typeof output === 'string' ? JSON.parse(output) : output;
+}
+
+function getSourceUrl(output) {
+  if (typeof output !== 'string') {
+    throw new Error('yt-dlp did not return a source URL');
+  }
+
+  const sourceUrl = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('http://') || line.startsWith('https://'))
+    .pop();
+
+  if (!sourceUrl) {
+    throw new Error('Failed to resolve SoundCloud source audio URL');
+  }
+
+  return sourceUrl;
+}
+
 function createSoundCloudRouter({ runYtDlp, spawn, getFfmpegCommand, parseLimit, parseBitrate }) {
   const router = Router();
 
@@ -19,7 +41,8 @@ function createSoundCloudRouter({ runYtDlp, spawn, getFfmpegCommand, parseLimit,
 
     try {
       const stdout = await runYtDlp(`scsearch${limit}:${q}`, { flatPlaylist: true, dumpSingleJson: true });
-      const entries = Array.isArray(JSON.parse(stdout).entries) ? JSON.parse(stdout).entries : [];
+      const payload = parseYtDlpJson(stdout);
+      const entries = Array.isArray(payload.entries) ? payload.entries : [];
       const tracks = entries.map((item) => item && item.url ? {
         id: item.id || null,
         title: item.title || 'Unknown title',
@@ -40,7 +63,7 @@ function createSoundCloudRouter({ runYtDlp, spawn, getFfmpegCommand, parseLimit,
 
     try {
       const stdout = await runYtDlp(url, { noPlaylist: true, dumpSingleJson: true, skipDownload: true });
-      res.json({ success: true, info: JSON.parse(stdout) });
+      res.json({ success: true, info: parseYtDlpJson(stdout) });
     } catch (error) {
       console.error(`[${new Date().toISOString()}] SoundCloud info error:`, error.message);
       res.status(500).json({ success: false, error: 'Failed to fetch SoundCloud track info' });
@@ -55,15 +78,37 @@ function createSoundCloudRouter({ runYtDlp, spawn, getFfmpegCommand, parseLimit,
     let ffmpeg;
     try {
       const stdout = await runYtDlp(url, { f: 'bestaudio/best', noPlaylist: true, getUrl: true });
-      const sourceUrl = stdout.trim().split('\n').pop();
-      if (!sourceUrl || !sourceUrl.startsWith('http')) throw new Error('Failed to resolve source audio URL');
+      const sourceUrl = getSourceUrl(stdout);
       res.setHeader('Content-Type', 'audio/mpeg');
       res.setHeader('Cache-Control', 'no-store');
-      ffmpeg = spawn(getFfmpegCommand(), ['-i', sourceUrl, '-vn', '-acodec', 'libmp3lame', '-ab', bitrate, '-f', 'mp3', 'pipe:1'], { stdio: ['ignore', 'pipe', 'pipe'] });
+      ffmpeg = spawn(getFfmpegCommand(), [
+        '-hide_banner',
+        '-loglevel', 'error',
+        '-i', sourceUrl,
+        '-vn',
+        '-sn',
+        '-dn',
+        '-c:a', 'libmp3lame',
+        '-b:a', bitrate,
+        '-f', 'mp3',
+        'pipe:1'
+      ], { stdio: ['ignore', 'pipe', 'pipe'] });
       ffmpeg.stdout.pipe(res);
-      ffmpeg.on('error', (error) => { console.error(`[${new Date().toISOString()}] SoundCloud ffmpeg error:`, error.message); if (!res.headersSent) res.status(500).json({ success: false, error: 'Failed to start MP3 transcoder' }); else res.end(); });
-      ffmpeg.on('close', () => { if (!res.writableEnded) res.end(); });
-      req.on('close', () => { if (ffmpeg && !ffmpeg.killed) ffmpeg.kill('SIGKILL'); });
+      ffmpeg.stderr.on('data', (data) => {
+        console.error(`[${new Date().toISOString()}] SoundCloud ffmpeg: ${data.toString().trim()}`);
+      });
+      ffmpeg.on('error', (error) => {
+        console.error(`[${new Date().toISOString()}] SoundCloud ffmpeg error:`, error.message);
+        if (!res.headersSent) res.status(500).json({ success: false, error: 'Failed to start MP3 transcoder' });
+        else res.end();
+      });
+      ffmpeg.on('close', (code) => {
+        if (code !== 0) console.error(`[${new Date().toISOString()}] SoundCloud ffmpeg exited with code ${code}`);
+        if (!res.writableEnded) res.end();
+      });
+      res.on('close', () => {
+        if (!res.writableEnded && ffmpeg && !ffmpeg.killed) ffmpeg.kill('SIGKILL');
+      });
     } catch (error) {
       console.error(`[${new Date().toISOString()}] SoundCloud stream error:`, error.message);
       if (ffmpeg && !ffmpeg.killed) ffmpeg.kill('SIGKILL');

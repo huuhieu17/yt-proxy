@@ -122,3 +122,26 @@ curl "http://localhost:3000/soundcloud/search?q=lofi&limit=5"
 - yt-dlp (bundled via npm package `yt-dlp-exec`, no global install required)
 - ffmpeg (bundled via npm package `ffmpeg-static`, no global install required)
 - Express.js
+
+## GitHub Actions - Docker Hub
+
+Workflow `.github/workflows/docker-publish.yml` sẽ tự động build và push image lên Docker Hub khi push vào branch `main` hoặc `master`, và khi tạo tag dạng `v1.0.0`.
+
+Tạo các GitHub repository secrets sau:
+
+- `DOCKERHUB_USERNAME`: Docker Hub username
+- `DOCKERHUB_TOKEN`: Docker Hub access token, không dùng password tài khoản
+
+Image được publish theo dạng:
+
+```text
+<DOCKERHUB_USERNAME>/steve-music-api:latest
+<DOCKERHUB_USERNAME>/steve-music-api:sha-<commit>
+```
+
+Trên Synology có thể pull image đã build:
+
+```bash
+docker pull <DOCKERHUB_USERNAME>/steve-music-api:latest
+docker compose up -d
+```

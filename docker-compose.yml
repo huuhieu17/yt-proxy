@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: app
     container_name: steve-music-api
     environment:
       - PORT=7777
