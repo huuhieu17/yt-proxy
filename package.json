@@ -1,7 +1,7 @@
 {
-  "name": "xiaozhi-music-backend",
+  "name": "steve-music-backend",
   "version": "1.0.0",
-  "description": "YouTube audio search API for Xiaozhi ESP32",
+  "description": "YouTube audio search API for steve Raspberry Pi project",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"

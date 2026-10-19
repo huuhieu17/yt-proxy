@@ -1,11 +1,11 @@
 version: '3.8'
 
 services:
-  xiaozhi-music-api:
+  steve-music-api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: xiaozhi-music-api
+    container_name: steve-music-api
     environment:
       - PORT=7777
       - TZ=Asia/Ho_Chi_Minh
