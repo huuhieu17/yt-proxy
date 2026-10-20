@@ -77,6 +77,9 @@ function createSoundCloudRouter({ runYtDlp, spawn, getFfmpegCommand, parseLimit,
 
     let ffmpeg;
     let responseFinished = false;
+    let ffmpegExited = false;
+    let disconnectHandled = false;
+    let forceKillTimer;
     try {
       const stdout = await runYtDlp(url, { f: 'bestaudio/best', noPlaylist: true, getUrl: true });
       const sourceUrl = getSourceUrl(stdout);
@@ -104,7 +107,9 @@ function createSoundCloudRouter({ runYtDlp, spawn, getFfmpegCommand, parseLimit,
         else res.end();
       });
       ffmpeg.on('close', (code) => {
-        if (code !== 0) {
+        ffmpegExited = true;
+        if (forceKillTimer) clearTimeout(forceKillTimer);
+        if (code !== 0 && !disconnectHandled) {
           console.error(
             `[${new Date().toISOString()}] SoundCloud ffmpeg exited with code ${code}, signal=${ffmpeg.signalCode || 'none'}`
           );
@@ -115,14 +120,21 @@ function createSoundCloudRouter({ runYtDlp, spawn, getFfmpegCommand, parseLimit,
         responseFinished = true;
       });
       res.on('close', () => {
-        if (!responseFinished && !res.writableFinished && ffmpeg && !ffmpeg.killed) {
+        if (!responseFinished && !res.writableFinished && !ffmpegExited && ffmpeg && !ffmpeg.killed) {
+          disconnectHandled = true;
           console.warn(`[${new Date().toISOString()}] SoundCloud client disconnected; stopping ffmpeg`);
-          ffmpeg.kill('SIGKILL');
+          // Give ffmpeg a chance to close its input/output cleanly. This also
+          // avoids reporting an expected client abort as an ffmpeg failure.
+          ffmpeg.kill('SIGTERM');
+          forceKillTimer = setTimeout(() => {
+            if (!ffmpegExited && !ffmpeg.killed) ffmpeg.kill('SIGKILL');
+          }, 2000);
+          forceKillTimer.unref();
         }
       });
     } catch (error) {
       console.error(`[${new Date().toISOString()}] SoundCloud stream error:`, error.message);
-      if (ffmpeg && !ffmpeg.killed) ffmpeg.kill('SIGKILL');
+      if (ffmpeg && !ffmpeg.killed) ffmpeg.kill('SIGTERM');
       if (!res.headersSent) res.status(500).json({ success: false, error: 'Failed to stream MP3 from SoundCloud' });
     }
   });

@@ -7,12 +7,15 @@ const { createSoundCloudRouter } = require('./services/soundcloud');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const ytDlpRunner = process.env.YTDLP_BIN
+  ? ytDlp.create(process.env.YTDLP_BIN)
+  : ytDlp;
 
 async function runYtDlp(url, flags = {}, timeout = 30000) {
   try {
-    return await ytDlp(url, flags, { timeout, windowsHide: true, maxBuffer: 10 * 1024 * 1024 });
+    return await ytDlpRunner(url, flags, { timeout, windowsHide: true, maxBuffer: 10 * 1024 * 1024 });
   } catch (error) {
-    if (error && (error.code === 'ENOENT' || String(error.message).includes('yt-dlp'))) {
+    if (error && error.code === 'ENOENT') {
       throw new Error('yt-dlp is unavailable. Run npm install to install dependencies.');
     }
     throw error;
@@ -20,6 +23,7 @@ async function runYtDlp(url, flags = {}, timeout = 30000) {
 }
 
 function getFfmpegCommand() {
+  if (process.env.FFMPEG_BIN) return process.env.FFMPEG_BIN;
   if (ffmpegPath) return ffmpegPath;
   throw new Error('ffmpeg is unavailable. Run npm install to install dependencies.');
 }

@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   steve-music-api:
+    platform: linux/amd64
     image: huuhieu17/steve-music-api:latest
     container_name: steve-music-api
     environment:

@@ -25,6 +25,8 @@ WORKDIR /app
 COPY . .
 
 ENV PORT=7777
+ENV YTDLP_BIN=/usr/local/bin/yt-dlp
+ENV FFMPEG_BIN=/usr/bin/ffmpeg
 
 EXPOSE 7777
 
