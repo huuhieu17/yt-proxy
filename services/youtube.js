@@ -132,8 +132,9 @@ function createYoutubeRouter({ runYtDlp, spawn, getFfmpegCommand, extractVideoId
         else res.end();
       });
       ffmpeg.on('close', (code, signal) => {
-        if (code !== 0 && signal !== 'SIGKILL') {
-          console.error(`[${new Date().toISOString()}] YouTube ffmpeg exited with code ${code}, signal=${signal || 'none'}`);
+        const expectedSignals = ['SIGKILL', 'SIGTERM', 'SIGPIPE'];
+        if (code !== 0 && !expectedSignals.includes(signal)) {
+         console.error(`[${new Date().toISOString()}] YouTube ffmpeg exited with code ${code}, signal=${signal || 'none'}`);
         }
         if (!res.writableEnded) res.end();
       });
