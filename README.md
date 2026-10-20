@@ -47,6 +47,9 @@ Tìm track trên SoundCloud.
 ### GET /soundcloud/info?url={trackUrl}
 Trả về metadata của track SoundCloud.
 
+### GET /soundcloud/related?url={trackUrl}&limit=10
+Tìm các track liên quan dựa trên nghệ sĩ và tên của track hiện tại. Track hiện tại sẽ được loại khỏi kết quả.
+
 ### GET /soundcloud/play?url={trackUrl}&bitrate=192k
 Trả về URL stream MP3 của track SoundCloud.
 

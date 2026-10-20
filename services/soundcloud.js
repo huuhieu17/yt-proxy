@@ -31,6 +31,17 @@ function getSourceUrl(output) {
   return sourceUrl;
 }
 
+function normalizeTrack(item) {
+  if (!item || !item.url) return null;
+  return {
+    id: item.id || null,
+    title: item.title || 'Unknown title',
+    artist: item.uploader || item.artist || null,
+    url: item.webpage_url || item.url,
+    thumbnail: item.thumbnail || null
+  };
+}
+
 function createSoundCloudRouter({ runYtDlp, spawn, getFfmpegCommand, parseLimit, parseBitrate }) {
   const router = Router();
 
@@ -43,17 +54,55 @@ function createSoundCloudRouter({ runYtDlp, spawn, getFfmpegCommand, parseLimit,
       const stdout = await runYtDlp(`scsearch${limit}:${q}`, { flatPlaylist: true, dumpSingleJson: true });
       const payload = parseYtDlpJson(stdout);
       const entries = Array.isArray(payload.entries) ? payload.entries : [];
-      const tracks = entries.map((item) => item && item.url ? {
-        id: item.id || null,
-        title: item.title || 'Unknown title',
-        artist: item.uploader || item.artist || null,
-        url: item.webpage_url || item.url,
-        thumbnail: item.thumbnail || null
-      } : null).filter(Boolean);
+      const tracks = entries.map(normalizeTrack).filter(Boolean);
       res.json({ success: true, query: q, count: tracks.length, tracks });
     } catch (error) {
       console.error(`[${new Date().toISOString()}] SoundCloud search error:`, error.message);
       res.status(500).json({ success: false, error: 'Failed to search SoundCloud' });
+    }
+  });
+
+  router.get('/related', async (req, res) => {
+    const { url } = req.query;
+    const limit = parseLimit(req.query.limit, 10, 50);
+    if (!isSoundCloudUrl(url)) {
+      return res.status(400).json({ success: false, error: 'Missing or invalid SoundCloud url' });
+    }
+
+    try {
+      const infoOutput = await runYtDlp(url, {
+        noPlaylist: true,
+        dumpSingleJson: true,
+        skipDownload: true
+      });
+      const info = parseYtDlpJson(infoOutput);
+      const artist = info.uploader || info.artist || '';
+      const title = info.track || info.title || '';
+      const query = `${artist} ${title}`.trim();
+      if (!query) throw new Error('SoundCloud track has no searchable metadata');
+
+      const searchOutput = await runYtDlp(`scsearch${Math.min(limit + 5, 50)}:${query}`, {
+        flatPlaylist: true,
+        dumpSingleJson: true
+      });
+      const payload = parseYtDlpJson(searchOutput);
+      const currentId = info.id || null;
+      const currentUrl = String(url).replace(/\/$/, '').toLowerCase();
+      const tracks = (Array.isArray(payload.entries) ? payload.entries : [])
+        .map(normalizeTrack)
+        .filter((track) => track && track.id !== currentId && String(track.url).replace(/\/$/, '').toLowerCase() !== currentUrl)
+        .slice(0, limit);
+
+      res.json({
+        success: true,
+        source: { id: currentId, title: info.title || null, artist: artist || null, url },
+        query,
+        count: tracks.length,
+        tracks
+      });
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] SoundCloud related error:`, error.message);
+      res.status(500).json({ success: false, error: 'Failed to find related SoundCloud tracks' });
     }
   });
 

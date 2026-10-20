@@ -79,6 +79,7 @@ app.get('/', (req, res) => {
       '/youtube/info?videoId=YOUTUBE_VIDEO_ID',
       '/youtube/play?videoId=YOUTUBE_VIDEO_ID&bitrate=192k',
       '/soundcloud/search?q=track+name&limit=10',
+      '/soundcloud/related?url=SOUNDCLOUD_TRACK_URL&limit=10',
       '/soundcloud/info?url=SOUNDCLOUD_TRACK_URL',
       '/soundcloud/play?url=SOUNDCLOUD_TRACK_URL&bitrate=192k'
     ]
