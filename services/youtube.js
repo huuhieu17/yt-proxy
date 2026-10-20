@@ -84,72 +84,100 @@ function createYoutubeRouter({ runYtDlp, spawn, getFfmpegCommand, extractVideoId
     }
   });
 
-  router.get('/stream/mp3', async (req, res) => {
+  router.get("/stream/mp3", async (req, res) => {
     const { videoId, url } = req.query;
     const bitrate = parseBitrate(req.query.bitrate);
     const resolvedVideoId = extractVideoId(videoId || url);
-
     if (!resolvedVideoId) {
-      return res.status(400).json({ success: false, error: 'Missing or invalid videoId/url' });
+      return res.status(400).json({
+        success: false,
+        error:
+          "Missing or invalid videoId/url. Example: /stream/mp3?videoId=dQw4w9WgXcQ",
+      });
     }
 
-    let ffmpeg;
     try {
-      const stdout = await runYtDlp(`https://www.youtube.com/watch?v=${resolvedVideoId}`, {
-        f: 'bestaudio/best',
+      const videoUrl = `https://www.youtube.com/watch?v=${resolvedVideoId}`;
+      const stdout = await runYtDlp(videoUrl, {
+        f: "bestaudio/best",
         noPlaylist: true,
         getUrl: true,
-        quiet: true,
-        noWarnings: true,
-        extractorArgs: 'youtube:player_client=android'
+        extractorArgs: "youtube:player_client=android",
       });
-      const sourceUrl = getSourceUrl(stdout);
 
-      res.setHeader('Content-Type', 'audio/mpeg');
-      res.setHeader('Cache-Control', 'no-store');
-      res.setHeader('Accept-Ranges', 'none');
-      let responseFinished = false;
-      ffmpeg = spawn(getFfmpegCommand(), [
-        '-hide_banner',
-        '-loglevel', 'error',
-        '-reconnect', '1',
-        '-reconnect_streamed', '1',
-        '-reconnect_delay_max', '5',
-        '-i', sourceUrl,
-        '-vn',
-        '-sn',
-        '-dn',
-        '-c:a', 'libmp3lame',
-        '-b:a', bitrate,
-        '-f', 'mp3',
-        'pipe:1'
-      ], { stdio: ['ignore', 'pipe', 'pipe'] });
+      const sourceUrl = stdout.trim().split("\n").pop();
+      if (!sourceUrl || !sourceUrl.startsWith("http")) {
+        throw new Error("Failed to resolve source audio URL");
+      }
+
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Cache-Control", "no-store");
+
+      const ffmpeg = spawn(
+        getFfmpegCommand(),
+        [
+          "-i",
+          sourceUrl,
+          "-vn",
+          "-acodec",
+          "libmp3lame",
+          "-ab",
+          bitrate,
+          "-f",
+          "mp3",
+          "pipe:1",
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+
       ffmpeg.stdout.pipe(res);
-      ffmpeg.stderr.on('data', (data) => console.error(`[${new Date().toISOString()}] ffmpeg: ${data}`));
-      ffmpeg.on('error', (error) => {
-        console.error(`[${new Date().toISOString()}] ffmpeg error:`, error.message);
-        if (!res.headersSent) res.status(500).json({ success: false, error: 'Failed to start MP3 transcoder' });
-        else res.end();
-      });
-      ffmpeg.on('close', (code, signal) => {
-        if (code !== 0 && signal !== 'SIGKILL') {
-          console.error(`[${new Date().toISOString()}] YouTube ffmpeg exited with code ${code}, signal=${signal || 'none'}`);
+
+      ffmpeg.on("error", (err) => {
+        console.error(
+          `[${new Date().toISOString()}] ffmpeg spawn error:`,
+          err.message,
+        );
+        if (!res.headersSent) {
+          res
+            .status(500)
+            .json({ success: false, error: "Failed to start MP3 transcoder" });
+        } else {
+          res.end();
         }
-        if (!res.writableEnded) res.end();
       });
-      res.on('finish', () => {
-        responseFinished = true;
+
+      ffmpeg.on("close", () => {
+        if (!res.writableEnded) {
+          res.end();
+        }
       });
-      res.on('close', () => {
-        if (!responseFinished && !res.writableFinished && ffmpeg && !ffmpeg.killed) {
-          console.warn(`[${new Date().toISOString()}] YouTube client disconnected; stopping ffmpeg`);
-          ffmpeg.kill('SIGKILL');
+
+      req.on("close", () => {
+        if (!ffmpeg.killed) {
+          ffmpeg.kill("SIGKILL");
         }
       });
     } catch (error) {
-      console.error(`[${new Date().toISOString()}] YouTube stream error:`, error.message);
-      if (ffmpeg && !ffmpeg.killed) ffmpeg.kill('SIGKILL');
-      if (!res.headersSent) res.status(500).json({ success: false, error: 'Failed to stream MP3 from YouTube' });
+      console.error(
+        `[${new Date().toISOString()}] stream/mp3 error:`,
+        error.message,
+      );
+      const errorMessage = String(error.message || "");
+      const isFfmpegMissing = errorMessage.includes("ffmpeg is unavailable");
+      const isUnavailable =
+        errorMessage.includes("This video is not available") ||
+        errorMessage.includes("Video unavailable") ||
+        errorMessage.includes("Private video") ||
+        errorMessage.includes("Sign in to confirm your age");
+
+      res.status(500).json({
+        success: false,
+        error: isFfmpegMissing
+          ? "MP3 transcoder is unavailable on server"
+          : isUnavailable
+            ? "Video is unavailable or restricted on YouTube"
+            : "Failed to stream MP3 from YouTube",
+      });
     }
   });
 
