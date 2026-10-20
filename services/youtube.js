@@ -125,7 +125,14 @@ function createYoutubeRouter({ runYtDlp, spawn, getFfmpegCommand, extractVideoId
         'pipe:1'
       ], { stdio: ['ignore', 'pipe', 'pipe'] });
       ffmpeg.stdout.pipe(res);
-      ffmpeg.stderr.on('data', (data) => console.error(`[${new Date().toISOString()}] ffmpeg: ${data}`));
+      ffmpeg.stderr.on('data', (data) => {
+       const msg = data.toString();
+       if (msg.includes('403 Forbidden')) {
+        console.error('BỊ YOUTUBE CHẶN IP:', msg);
+       } else {
+         console.log('FFmpeg log:', msg); // Bật dòng này lên để xem FFmpeg đang bị kẹt ở đâu
+       }
+      });
       ffmpeg.on('error', (error) => {
         console.error(`[${new Date().toISOString()}] ffmpeg error:`, error.message);
         if (!res.headersSent) res.status(500).json({ success: false, error: 'Failed to start MP3 transcoder' });
