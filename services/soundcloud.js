@@ -78,7 +78,13 @@ function createSoundCloudRouter({ runYtDlp, spawn, getFfmpegCommand, parseLimit,
       const info = parseYtDlpJson(infoOutput);
       const artist = info.uploader || info.artist || '';
       const title = info.track || info.title || '';
-      const query = `${artist} ${title}`.trim();
+      const genre = typeof info.genre === 'string' ? info.genre.trim() : '';
+      const tags = Array.isArray(info.tags)
+        ? info.tags.filter((tag) => typeof tag === 'string').slice(0, 3).join(' ')
+        : typeof info.tags === 'string'
+          ? info.tags.trim()
+          : '';
+      const query = `${genre} ${tags}`.trim() || `${artist} ${title}`.trim();
       if (!query) throw new Error('SoundCloud track has no searchable metadata');
 
       const searchOutput = await runYtDlp(`scsearch${Math.min(limit + 5, 50)}:${query}`, {
